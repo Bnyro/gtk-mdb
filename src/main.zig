@@ -3,12 +3,14 @@ const capy = @import("capy");
 
 // https://image.tmdb.org/t/p/w500/8YFL5QQVPy3AgrEQxNYVSgiPEbe.jpg
 // https://www.themoviedb.org/documentation/api/discover
+// https://api.themoviedb.org/3/search/movie?query=&api_key=
 // https://api.themoviedb.org/3/discover/movie?api_key=
 
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const allocator = arena.allocator();
 
 var container: *capy.Container_Impl = undefined;
+var query = capy.Atom([]const u8).of("");
 
 const string = []const u8;
 const Result = struct {
@@ -76,18 +78,38 @@ fn createEntry(movie: Result) void {
             capy.Label(.{ .text = addNullByte(movie.original_language) }),
         }) catch unreachable,
     }) catch unreachable;
-    const content = capy.Margin(capy.Rectangle.init(10, 10, 10, 10), column) catch unreachable;
+
+    const margin = capy.Rectangle.init(10, 10, 10, 10);
+    const content = capy.Margin(margin, column) catch unreachable;
     container.add(content) catch unreachable;
 }
 
-pub fn fetchDiscover() anyerror!void {
-    const apiKey = std.os.getenv("TMDB_KEY").?;
-    const url = try std.fmt.allocPrint(allocator, "{s}/discover/movie?api_key={s}", .{ baseUrl, apiKey });
+fn getApiKey() string {
+    return std.os.getenv("TMDB_KEY").?;
+}
+
+fn fetchDiscover() anyerror!void {
+    const url = try std.fmt.allocPrint(allocator, "{s}/discover/movie?api_key={s}", .{ baseUrl, getApiKey() });
     const discoverResponse = try fetchJson(DiscoverResponse, url);
 
     for (discoverResponse.results) |movie| {
         createEntry(movie);
     }
+}
+
+fn fetchSearch() anyerror!void {
+    const url = try std.fmt.allocPrint(allocator, "{s}/discover/movie?query={s}&api_key={s}", .{ baseUrl, query.get(), getApiKey() });
+    const discoverResponse = try fetchJson(DiscoverResponse, url);
+
+    container.removeAll();
+    std.debug.print("removed all", .{});
+    for (discoverResponse.results) |movie| {
+        createEntry(movie);
+    }
+}
+
+fn search(_: *anyopaque) anyerror!void {
+    try fetchSearch();
 }
 
 pub fn main() anyerror!void {
@@ -101,7 +123,20 @@ pub fn main() anyerror!void {
 
     var c = try capy.Column(.{}, .{});
     container = &c;
-    try window.set(capy.Expanded(capy.Scrollable(container)));
+
+    const margin = capy.Rectangle.init(10, 10, 10, 10);
+    try window.set(capy.Expanded(capy.Column(.{
+        .spacing = 5,
+    }, .{
+        capy.Margin(
+            margin,
+            capy.Row(.{}, .{
+                capy.Expanded(capy.TextField(.{}).bind("text", &query)),
+                capy.Button(.{ .label = "Search", .onclick = &search }),
+            }),
+        ),
+        capy.Scrollable(container),
+    })));
 
     window.resize(800, 600);
     window.show();

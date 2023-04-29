@@ -29,7 +29,7 @@ const Result = struct {
 };
 
 const baseUrl = "https://api.themoviedb.org/3";
-const imageUrl = "https://image.tmdb.org/t/p/w500";
+const imageUrl = "https://image.tmdb.org/t/p/w200";
 
 const DiscoverResponse = struct { page: i64, total_pages: i64, total_results: i64, results: []Result };
 
@@ -60,16 +60,24 @@ fn fetchJson(comptime T: type, url: string) anyerror!T {
     return try std.json.parse(T, &stream, .{ .allocator = allocator, .ignore_unknown_fields = true });
 }
 
-pub fn createEntry(movie: Result) void {
-    const text = std.cstr.addNullByte(allocator, movie.title) catch return;
-    const label = capy.Label(.{ .text = text });
+fn addNullByte(str: string) [:0]u8 {
+    return std.cstr.addNullByte(allocator, str) catch unreachable;
+}
 
-    const posterUrl = std.fmt.allocPrint(allocator, "{s}{s}", .{ imageUrl, movie.poster_path }) catch return;
-    const image = capy.Image(.{ .url = posterUrl });
+fn createEntry(movie: Result) void {
+    // const posterUrl = std.fmt.allocPrint(allocator, "{s}{s}", .{ imageUrl, movie.poster_path }) catch return;
+    // const image = capy.Image(.{ .url = posterUrl });
 
-    const row = capy.Row(.{}, .{ image, label });
-
-    container.add(row) catch return;
+    const column = capy.Column(.{}, .{
+        capy.Label(.{ .text = addNullByte(movie.title) }),
+        capy.Label(.{ .text = addNullByte(movie.overview) }),
+        capy.Row(.{}, .{
+            capy.Label(.{ .text = addNullByte(movie.release_date) }),
+            capy.Label(.{ .text = addNullByte(movie.original_language) }),
+        }) catch unreachable,
+    }) catch unreachable;
+    const content = capy.Margin(capy.Rectangle.init(10, 10, 10, 10), column) catch unreachable;
+    container.add(content) catch unreachable;
 }
 
 pub fn fetchDiscover() anyerror!void {
@@ -93,7 +101,7 @@ pub fn main() anyerror!void {
 
     var c = try capy.Column(.{}, .{});
     container = &c;
-    try window.set(container);
+    try window.set(capy.Expanded(capy.Scrollable(container)));
 
     window.resize(800, 600);
     window.show();
